@@ -1,0 +1,5 @@
+{
+  "name": "Quick Bite",
+  "description": "A smart college canteen ordering platform with AI food suggestions, real-time order tracking, and simulated payments.",
+  "requestFramePermissions": []
+}
