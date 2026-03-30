@@ -24,6 +24,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [menuForm, setMenuForm] = useState<Partial<MenuItem>>({ name: '', price: 0, category: FoodCategory.LUNCH, description: '', image: '', isVeg: true });
 
+  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
+  const [couponForm, setCouponForm] = useState<Partial<Coupon>>({ code: '', type: DiscountType.PERCENTAGE, value: 10, category: 'ALL', expiryDate: new Date().toISOString().split('T')[0] });
+
   useEffect(() => {
     const updateData = async () => {
       setAnalytics(await db.getAnalytics());
@@ -58,6 +61,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           else await db.addMenuItem(menuForm as any);
           setIsMenuModalOpen(false);
       } catch (err) { alert('Failed'); }
+  };
+
+  const handleOpenCouponModal = () => {
+      setCouponForm({ code: '', type: DiscountType.PERCENTAGE, value: 10, category: 'ALL', expiryDate: new Date().toISOString().split('T')[0] });
+      setIsCouponModalOpen(true);
+  };
+
+  const handleCouponSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      try {
+          db.addCoupon({
+              id: Math.random().toString(36).substr(2, 9),
+              ...couponForm
+          } as Coupon);
+          setCoupons(db.getCoupons());
+          setIsCouponModalOpen(false);
+      } catch (err) { alert('Failed to add coupon'); }
   };
 
   const handleScanQR = () => {
@@ -184,7 +204,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                      <button onClick={() => handleOpenMenuModal()} className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 p-4 rounded-xl font-bold text-left flex items-center transition-colors">
                          <Plus className="w-5 h-5 mr-3 text-orange-500" /> Add Menu Item
                      </button>
-                     <button onClick={() => setActiveTab('coupons')} className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 p-4 rounded-xl font-bold text-left flex items-center transition-colors">
+                     <button onClick={() => { setActiveTab('coupons'); handleOpenCouponModal(); }} className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 p-4 rounded-xl font-bold text-left flex items-center transition-colors">
                          <Ticket className="w-5 h-5 mr-3 text-pink-500" /> Create Promo
                      </button>
                  </div>
@@ -314,6 +334,40 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           </div>
       )}
 
+      {/* COUPONS TAB */}
+      {activeTab === 'coupons' && (
+          <div className="glass-panel rounded-3xl overflow-hidden animate-in fade-in">
+              <div className="p-6 border-b border-white/5 flex justify-between items-center">
+                  <h3 className="font-bold text-white">Active Coupons</h3>
+                  <button onClick={handleOpenCouponModal} className="bg-white text-slate-900 px-4 py-2 rounded-xl text-sm font-bold flex items-center shadow-lg"><Plus className="w-4 h-4 mr-2" /> Add Coupon</button>
+              </div>
+              <div className="divide-y divide-white/5">
+                  {coupons.length === 0 ? (
+                      <div className="p-8 text-center text-slate-500 font-bold text-sm uppercase tracking-widest">No active coupons</div>
+                  ) : coupons.map(coupon => (
+                      <div key={coupon.id} className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors">
+                          <div className="flex items-center space-x-4">
+                              <div className="w-12 h-12 rounded-xl bg-pink-500/20 text-pink-400 flex items-center justify-center font-bold">
+                                  <Ticket className="w-6 h-6" />
+                              </div>
+                              <div>
+                                  <h4 className="font-bold text-slate-200 uppercase tracking-wider">{coupon.code}</h4>
+                                  <div className="flex items-center mt-1 space-x-2 text-xs">
+                                     <span className="text-slate-400">
+                                         {coupon.type === DiscountType.PERCENTAGE ? `${coupon.value}% OFF` : `₹${coupon.value} OFF`}
+                                     </span>
+                                     <span className="bg-white/10 text-slate-300 px-1.5 py-0.5 rounded font-bold">Valid till {coupon.expiryDate}</span>
+                                     {coupon.category !== 'ALL' && <span className="bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-bold">{coupon.category}</span>}
+                                  </div>
+                              </div>
+                          </div>
+                          <button onClick={() => { deleteCoupon(coupon.id); setCoupons(db.getCoupons()); }} className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg"><Trash2 className="w-5 h-5" /></button>
+                      </div>
+                  ))}
+              </div>
+          </div>
+      )}
+
       {/* MENU MODAL */}
       {isMenuModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -358,6 +412,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                       <div className="pt-4 flex space-x-3">
                           <button type="button" onClick={() => setIsMenuModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-slate-400 hover:bg-white/5">Cancel</button>
                           <button type="submit" className="flex-1 bg-white text-slate-900 py-3 rounded-xl font-bold shadow-lg hover:bg-slate-200">Save</button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      )}
+
+      {/* COUPON MODAL */}
+      {isCouponModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <div className="glass-panel w-full max-w-lg rounded-3xl p-6 animate-in zoom-in-95">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="font-bold text-lg text-white">New Coupon</h3>
+                      <button onClick={() => setIsCouponModalOpen(false)}><X className="w-5 h-5 text-slate-400 hover:text-white" /></button>
+                  </div>
+                  <form onSubmit={handleCouponSubmit} className="space-y-4">
+                      <input type="text" placeholder="Coupon Code (e.g. SAVE20)" required className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-pink-500 uppercase" value={couponForm.code} onChange={e => setCouponForm({...couponForm, code: e.target.value.toUpperCase()})} />
+                      <div className="grid grid-cols-2 gap-4">
+                          <select className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none" value={couponForm.type} onChange={e => setCouponForm({...couponForm, type: e.target.value as DiscountType})}>
+                              <option value={DiscountType.PERCENTAGE}>Percentage (%)</option>
+                              <option value={DiscountType.FLAT}>Flat Amount (₹)</option>
+                          </select>
+                          <input type="number" placeholder="Value" required min="1" className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-pink-500" value={couponForm.value} onChange={e => setCouponForm({...couponForm, value: Number(e.target.value)})} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <select className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none" value={couponForm.category} onChange={e => setCouponForm({...couponForm, category: e.target.value as any})}>
+                              <option value="ALL">All Categories</option>
+                              {Object.values(FoodCategory).map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <input type="date" required className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-pink-500" value={couponForm.expiryDate} onChange={e => setCouponForm({...couponForm, expiryDate: e.target.value})} />
+                      </div>
+                      <div className="pt-4 flex space-x-3">
+                          <button type="button" onClick={() => setIsCouponModalOpen(false)} className="flex-1 py-3 rounded-xl font-bold text-slate-400 hover:bg-white/5">Cancel</button>
+                          <button type="submit" className="flex-1 bg-white text-slate-900 py-3 rounded-xl font-bold shadow-lg hover:bg-slate-200">Create Coupon</button>
                       </div>
                   </form>
               </div>
