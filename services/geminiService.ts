@@ -1,10 +1,25 @@
 import { GoogleGenAI } from "@google/genai";
 import { MenuItem, Order } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let aiInstance: GoogleGenAI | null = null;
+
+const getAI = () => {
+  if (!aiInstance) {
+    const key = process.env.API_KEY || process.env.GEMINI_API_KEY;
+    if (!key) {
+      console.warn("Gemini API Key is missing. AI features will not work.");
+      // Return a dummy object or throw, but throwing here might still crash if not caught.
+      // We'll throw, but ensure the caller catches it.
+      throw new Error("API key is missing");
+    }
+    aiInstance = new GoogleGenAI({ apiKey: key });
+  }
+  return aiInstance;
+};
 
 export const getMealSuggestion = async (preference: string, menu: MenuItem[], pastOrders: Order[] = []) => {
   try {
+    const ai = getAI();
     const menuString = JSON.stringify(menu.map(m => ({ name: m.name, desc: m.description, category: m.category, isVeg: m.isVeg, price: m.price })));
     
     // Extract names of recently ordered items for context
@@ -56,6 +71,7 @@ export const getMealSuggestion = async (preference: string, menu: MenuItem[], pa
 
 export const chatWithSupport = async (message: string, history: {role: string, content: string}[]) => {
   try {
+    const ai = getAI();
     const systemInstruction = `
       You are Quickbite's friendly AI support assistant.
       Your Role: Help students with ordering food, pickup slots, payments, and finding menu items on the Quickbite app.
