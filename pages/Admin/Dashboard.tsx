@@ -3,6 +3,7 @@ import { db } from '../../services/supabaseService';
 import { MenuItem, Order, OrderStatus, User, UserRole, FoodCategory, Coupon, DiscountType } from '../../types';
 import { AreaChart, Area, PieChart, Pie, Cell, Legend, ResponsiveContainer, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { LayoutDashboard, UtensilsCrossed, ChefHat, History, Ticket, Plus, Scan, DollarSign, TrendingUp, Zap, ThumbsDown, Edit, Trash2, Clock, CheckCircle, X, Image as ImageIcon, Save, ArrowRight, Star, Banknote, AlertTriangle } from 'lucide-react';
+import { Scanner } from '@yudiel/react-qr-scanner';
 
 interface AdminDashboardProps {
   user: User;
@@ -26,6 +27,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
   const [couponForm, setCouponForm] = useState<Partial<Coupon>>({ code: '', type: DiscountType.PERCENTAGE, value: 10, category: 'ALL', expiryDate: new Date().toISOString().split('T')[0] });
+
+  const [isScannerModalOpen, setIsScannerModalOpen] = useState(false);
+  const [manualOrderId, setManualOrderId] = useState('');
+  const [scannerError, setScannerError] = useState('');
+  const [scannerSuccess, setScannerSuccess] = useState('');
 
   useEffect(() => {
     const updateData = async () => {
@@ -81,12 +87,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   };
 
   const handleScanQR = () => {
-      const orderId = prompt("QR SCANNER (SIM): Enter Order ID");
+      setManualOrderId('');
+      setScannerError('');
+      setScannerSuccess('');
+      setIsScannerModalOpen(true);
+  };
+
+  const processOrderCollection = (orderId: string) => {
+      setScannerError('');
+      setScannerSuccess('');
       if (!orderId) return;
-      const order = orders.find(o => o.id === orderId.trim());
-      if (order && order.status === OrderStatus.READY) {
-          if (confirm(`Confirm Order #${order.id}?`)) updateStatus(order.id, OrderStatus.COMPLETED);
-      } else { alert("Invalid or not ready."); }
+      
+      // Try to extract ID if it's a full URL (e.g., from a QR code)
+      let cleanId = orderId.trim();
+      if (cleanId.includes('ORD-')) {
+          const match = cleanId.match(/(ORD-\d+)/);
+          if (match) cleanId = match[1];
+      }
+
+      const order = orders.find(o => o.id === cleanId);
+      if (order) {
+          if (order.status === OrderStatus.READY) {
+              updateStatus(order.id, OrderStatus.COMPLETED);
+              setScannerSuccess(`Order #${order.id} marked as COMPLETED!`);
+              setTimeout(() => {
+                  setIsScannerModalOpen(false);
+                  setScannerSuccess('');
+              }, 2000);
+          } else if (order.status === OrderStatus.COMPLETED) {
+              setScannerError(`Order #${order.id} has already been collected.`);
+          } else {
+              setScannerError(`Order #${order.id} is currently ${order.status}. It is not ready yet.`);
+          }
+      } else { 
+          setScannerError("Invalid Order ID. Order not found."); 
+      }
   };
 
   // Smart Link Processor for Google Images/Drive
@@ -451,6 +486,80 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                           <button type="submit" className="flex-1 bg-white text-slate-900 py-3 rounded-xl font-bold shadow-lg hover:bg-slate-200">Create Coupon</button>
                       </div>
                   </form>
+              </div>
+          </div>
+      )}
+      {/* SCANNER MODAL */}
+      {isScannerModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+              <div className="glass-panel w-full max-w-lg rounded-3xl p-6 animate-in zoom-in-95">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="font-bold text-lg text-white flex items-center"><Scan className="w-5 h-5 mr-2 text-orange-500" /> Order Scanner</h3>
+                      <button onClick={() => setIsScannerModalOpen(false)}><X className="w-5 h-5 text-slate-400 hover:text-white" /></button>
+                  </div>
+                  
+                  <div className="space-y-6">
+                      {/* Camera Scanner */}
+                      <div className="bg-slate-900 rounded-2xl overflow-hidden border border-white/10 aspect-square max-h-[300px] flex items-center justify-center relative">
+                          <Scanner 
+                              onScan={(result) => {
+                                  if (result && result.length > 0) {
+                                      processOrderCollection(result[0].rawValue);
+                                  }
+                              }}
+                              components={{
+                                  audio: false,
+                                  onOff: true,
+                                  torch: true,
+                                  zoom: true,
+                                  finder: true,
+                              }}
+                              styles={{
+                                  container: { width: '100%', height: '100%' }
+                              }}
+                          />
+                      </div>
+
+                      <div className="relative flex items-center py-2">
+                          <div className="flex-grow border-t border-white/10"></div>
+                          <span className="flex-shrink-0 mx-4 text-slate-500 text-xs font-bold uppercase tracking-widest">OR ENTER ID</span>
+                          <div className="flex-grow border-t border-white/10"></div>
+                      </div>
+
+                      {/* Manual Entry */}
+                      <div className="flex space-x-2">
+                          <input 
+                              type="text" 
+                              placeholder="e.g. ORD-12345" 
+                              className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-orange-500 uppercase font-mono" 
+                              value={manualOrderId} 
+                              onChange={e => setManualOrderId(e.target.value.toUpperCase())}
+                              onKeyDown={e => {
+                                  if (e.key === 'Enter') processOrderCollection(manualOrderId);
+                              }}
+                          />
+                          <button 
+                              onClick={() => processOrderCollection(manualOrderId)}
+                              className="bg-orange-600 hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold transition-colors"
+                          >
+                              Verify
+                          </button>
+                      </div>
+
+                      {/* Status Messages */}
+                      {scannerError && (
+                          <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl text-sm font-bold flex items-start">
+                              <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
+                              {scannerError}
+                          </div>
+                      )}
+                      {scannerSuccess && (
+                          <div className="bg-green-500/10 border border-green-500/30 text-green-400 p-4 rounded-xl text-sm font-bold flex items-center">
+                              <CheckCircle className="w-5 h-5 mr-2 flex-shrink-0" />
+                              {scannerSuccess}
+                          </div>
+                      )}
+                  </div>
               </div>
           </div>
       )}
