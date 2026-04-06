@@ -99,11 +99,16 @@ class SupabaseService extends EventTarget {
   setupRealtime() {
     this.realtimeSubscription = supabase
       .channel('public:orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
-        // Optimistically we handle updates locally, but this ensures multi-tab sync if connected
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
+        // Fetch latest orders to sync across devices
+        await this.getOrders();
         this.dispatchEvent(new Event('change'));
       })
-      .subscribe();
+      .subscribe((status, err) => {
+          if (err) {
+              console.warn('Realtime sync unavailable (Supabase project might be paused). Using local fallback.');
+          }
+      });
   }
 
   // --- Auth & User Management ---
@@ -284,14 +289,14 @@ class SupabaseService extends EventTarget {
   async updateMenuItem(id: string, updates: Partial<MenuItem>) {
     this._localMenu = this._localMenu.map(i => i.id === id ? { ...i, ...updates } : i);
     this._persistMenu();
-    supabase.from('menu_items').update(updates).eq('id', id).then();
+    supabase.from('menu_items').update(updates).eq('id', id).then().catch(() => {});
     this.dispatchEvent(new Event('change'));
   }
 
   async deleteMenuItem(id: string) {
     this._localMenu = this._localMenu.filter(i => i.id !== id);
     this._persistMenu();
-    supabase.from('menu_items').delete().eq('id', id).then();
+    supabase.from('menu_items').delete().eq('id', id).then().catch(() => {});
     this.dispatchEvent(new Event('change'));
   }
 
@@ -313,7 +318,19 @@ class SupabaseService extends EventTarget {
 
   // --- Orders ---
   async getOrders(): Promise<Order[]> {
-    // Return local orders first to ensure speed and availability
+    try {
+        const { data, error } = await supabase.from('orders').select('*').order('createdAt', { ascending: false });
+        if (!error && data && data.length > 0) {
+            // Merge remote with local, preferring remote
+            const remoteIds = new Set(data.map(o => o.id));
+            const localOnly = this._localOrders.filter(o => !remoteIds.has(o.id));
+            this._localOrders = [...data as Order[], ...localOnly].sort((a, b) => b.createdAt - a.createdAt);
+            this._persistOrders();
+        }
+    } catch (e) {
+        // Fallback to local
+    }
+
     return this._localOrders.map(o => {
         const hasReviews = this.reviews.some(r => r.orderId === o.id);
         return { ...o, isRated: o.isRated || hasReviews };
@@ -321,6 +338,28 @@ class SupabaseService extends EventTarget {
   }
 
   async getOrdersForUser(userId: string): Promise<Order[]> {
+    try {
+        const { data, error } = await supabase.from('orders').select('*').eq('userId', userId).order('createdAt', { ascending: false });
+        if (!error && data && data.length > 0) {
+            const remoteIds = new Set(data.map(o => o.id));
+            // Update local orders with these remote ones
+            this._localOrders = this._localOrders.filter(o => o.userId !== userId || remoteIds.has(o.id));
+            
+            for (const remoteOrder of data as Order[]) {
+                const existingIndex = this._localOrders.findIndex(o => o.id === remoteOrder.id);
+                if (existingIndex >= 0) {
+                    this._localOrders[existingIndex] = remoteOrder;
+                } else {
+                    this._localOrders.push(remoteOrder);
+                }
+            }
+            this._localOrders.sort((a, b) => b.createdAt - a.createdAt);
+            this._persistOrders();
+        }
+    } catch (e) {
+        // Fallback to local
+    }
+
     return this._localOrders
         .filter(o => o.userId === userId)
         .sort((a, b) => b.createdAt - a.createdAt)
@@ -367,6 +406,7 @@ class SupabaseService extends EventTarget {
     const newOrder: Order = {
       id: `ORD-${Math.floor(Math.random() * 100000)}`,
       userId: this.currentUser.id,
+      userName: this.currentUser.name,
       items: items, 
       totalAmount,
       discountAmount,
@@ -444,7 +484,7 @@ class SupabaseService extends EventTarget {
     }
 
     // 2. Remote Update
-    supabase.from('orders').update({ status }).eq('id', orderId).then();
+    supabase.from('orders').update({ status }).eq('id', orderId).then().catch(() => {});
     
     window.dispatchEvent(new CustomEvent('qb-notification', {
         detail: { type: 'ORDER_UPDATED', payload: { id: orderId, status } }

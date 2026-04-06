@@ -181,7 +181,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
              <div className="lg:col-span-2 glass-panel p-6 rounded-3xl min-w-0">
                   <h3 className="font-bold text-white mb-6">Revenue Analytics</h3>
                   <div className="h-[300px] w-full min-w-0 min-h-0">
-                      <ResponsiveContainer width="100%" height="100%">
+                      <ResponsiveContainer width="100%" height="100%" minHeight={300} minWidth={300}>
                         <AreaChart data={analytics.revenueData}>
                           <defs>
                             <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
@@ -236,7 +236,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                        {orders.filter(o => o.status === status).map(order => (
                            <div key={order.id} className="bg-slate-900/50 p-4 rounded-2xl border border-white/5 hover:border-white/20 transition-all shadow-sm">
                                <div className="flex justify-between items-start mb-2">
-                                   <span className="text-xs font-mono text-slate-500">#{order.id}</span>
+                                   <div>
+                                       <span className="text-xs font-mono text-slate-500 block">#{order.id}</span>
+                                       {order.userName && <span className="text-xs font-bold text-slate-300">{order.userName}</span>}
+                                   </div>
                                    <span className="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded">{order.pickupTime}</span>
                                </div>
                                <div className="space-y-1 mb-4">
@@ -312,12 +315,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead className="bg-white/5 text-slate-400 font-bold uppercase text-xs">
-                        <tr><th className="p-4">ID</th><th className="p-4">Items</th><th className="p-4">Total</th><th className="p-4">Payment</th><th className="p-4">Date</th></tr>
+                        <tr><th className="p-4">ID</th><th className="p-4">Customer</th><th className="p-4">Items</th><th className="p-4">Total</th><th className="p-4">Payment</th><th className="p-4">Date</th></tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
                         {orders.filter(o => o.status === OrderStatus.COMPLETED).map(order => (
                             <tr key={order.id} className="hover:bg-white/5">
                                 <td className="p-4 font-mono text-slate-500">#{order.id}</td>
+                                <td className="p-4 text-slate-300 font-bold">{order.userName || 'Guest'}</td>
                                 <td className="p-4 text-slate-300">{order.items.map(i => `${i.quantity}x ${i.name}`).join(', ')}</td>
                                 <td className="p-4 font-bold text-white">₹{order.totalAmount}</td>
                                 <td className="p-4">

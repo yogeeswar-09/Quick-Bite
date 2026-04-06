@@ -62,6 +62,7 @@ export interface CartItem extends MenuItem {
 export interface Order {
   id: string;
   userId: string;
+  userName?: string;
   items: CartItem[];
   totalAmount: number;
   discountAmount?: number;
