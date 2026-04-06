@@ -134,6 +134,19 @@ class SupabaseService extends EventTarget {
           console.log("Default Admin seeded");
       }
 
+      // Seed New Admin (MLRIT)
+      if (!users.some((u: any) => u.email === 'admin@mlrit.ac.in')) {
+          const mlritAdmin = {
+              id: 'admin-mlrit',
+              name: 'MLRIT Admin',
+              email: 'admin@mlrit.ac.in',
+              role: UserRole.ADMIN,
+              password: 'admin123' 
+          };
+          this._saveAuthUser(mlritAdmin);
+          console.log("MLRIT Admin seeded");
+      }
+
       // Seed Student
       if (!users.some((u: any) => u.email === 'student@demo.com')) {
           const defaultStudent = {
@@ -148,57 +161,84 @@ class SupabaseService extends EventTarget {
       }
   }
 
-  async register(data: { name: string; email: string; password: string; role: UserRole }): Promise<User> {
-      await new Promise(resolve => setTimeout(resolve, 800)); // Sim Network
-      
-      const users = this._getStoredAuthUsers();
-      if (users.find((u: any) => u.email.toLowerCase() === data.email.toLowerCase())) {
-          throw new Error('Email already registered');
+  async register(data: { name: string; email: string; password: string; role: UserRole }): Promise<{user?: User, message?: string}> {
+      const { data: authData, error } = await supabase.auth.signUp({
+          email: data.email,
+          password: data.password,
+          options: {
+              data: {
+                  name: data.name,
+                  role: data.role,
+              },
+              emailRedirectTo: window.location.origin,
+          }
+      });
+
+      if (error) {
+          if (error.message.includes('Failed to fetch')) {
+              throw new Error('Cannot connect to Supabase. Your project might be paused or the keys are invalid.');
+          }
+          throw new Error(error.message);
       }
 
-      const newUser = {
-          id: `u-${Date.now()}`,
+      // If email confirmation is required, authData.user is returned but session is null
+      if (authData.user && !authData.session) {
+          return { message: 'Verification email sent! Please check your inbox to verify your account before logging in.' };
+      }
+
+      if (!authData.user) throw new Error('Registration failed');
+
+      const sanitizedUser: User = {
+          id: authData.user.id,
           name: data.name,
           email: data.email,
-          role: data.role,
-          password: data.password // Stored locally for simulation
+          role: data.role
       };
 
-      this._saveAuthUser(newUser);
+      this.updateSession(sanitizedUser);
+      return { user: sanitizedUser };
+  }
 
-      // Return sanitized user (no password)
+  async login(email: string, password: string): Promise<User> {
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
+          email,
+          password
+      });
+
+      if (error) {
+          // Fallback to local mock users for demo buttons
+          const users = this._getStoredAuthUsers();
+          const user = users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
+          if (user && user.password === password) {
+              const sanitizedUser: User = {
+                  id: user.id,
+                  name: user.name,
+                  email: user.email,
+                  role: user.role
+              };
+              this.updateSession(sanitizedUser);
+              return sanitizedUser;
+          }
+          
+          if (error.message.includes('Failed to fetch')) {
+              throw new Error('Cannot connect to Supabase. Your project might be paused or the keys are invalid.');
+          }
+          throw new Error(error.message);
+      }
+
       const sanitizedUser: User = {
-          id: newUser.id,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role
+          id: authData.user.id,
+          name: authData.user.user_metadata?.name || email.split('@')[0],
+          email: authData.user.email || email,
+          role: authData.user.user_metadata?.role || UserRole.CUSTOMER
       };
 
       this.updateSession(sanitizedUser);
       return sanitizedUser;
   }
 
-  async login(email: string, password: string): Promise<User> {
-    await new Promise(resolve => setTimeout(resolve, 800)); // Sim Network
-
-    const users = this._getStoredAuthUsers();
-    const user = users.find((u: any) => u.email.toLowerCase() === email.toLowerCase());
-
-    if (!user) throw new Error('Account not found');
-    if (user.password !== password) throw new Error('Incorrect password');
-
-    const sanitizedUser: User = {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-    };
-
-    this.updateSession(sanitizedUser);
-    return sanitizedUser;
-  }
-
   async logout() {
+    await supabase.auth.signOut();
     this.currentUser = null;
     localStorage.removeItem('qb_current_user');
     this.dispatchEvent(new Event('session-updated'));

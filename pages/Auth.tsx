@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { db } from '../services/supabaseService';
 import { User, UserRole } from '../types';
-import { Heart, ArrowRight, AlertTriangle, UserPlus, LogIn, Lock, Mail, User as UserIcon, Zap, Coffee } from 'lucide-react';
+import { Heart, ArrowRight, AlertTriangle, UserPlus, LogIn, Lock, Mail, User as UserIcon, Zap, Coffee, CheckCircle } from 'lucide-react';
 
 interface AuthPageProps {
   onLogin: (user: User) => void;
@@ -11,6 +11,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   
   // Form State
   const [name, setName] = useState('');
@@ -21,6 +22,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccessMessage('');
 
     if (!email || !password || (!isLogin && !name)) {
         setError('Please fill in all fields.');
@@ -29,13 +31,19 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
     }
 
     try {
-      let user;
       if (isLogin) {
-          user = await db.login(email, password);
+          const user = await db.login(email, password);
+          onLogin(user);
       } else {
-          user = await db.register({ name, email, password, role: UserRole.CUSTOMER });
+          const result = await db.register({ name, email, password, role: UserRole.CUSTOMER });
+          if (result.message) {
+              setSuccessMessage(result.message);
+              setIsLogin(true);
+              setPassword('');
+          } else if (result.user) {
+              onLogin(result.user);
+          }
       }
-      onLogin(user);
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
     } finally {
@@ -46,6 +54,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
   const toggleMode = () => {
       setIsLogin(!isLogin);
       setError('');
+      setSuccessMessage('');
       setPassword('');
       if (!isLogin) {
           setName('');
@@ -135,6 +144,13 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLogin }) => {
                   <div className="flex items-center text-red-400 text-xs font-bold bg-red-500/10 p-3 rounded-xl animate-in shake border border-red-500/20">
                       <AlertTriangle className="w-4 h-4 mr-2 flex-shrink-0" />
                       {error}
+                  </div>
+              )}
+
+              {successMessage && (
+                  <div className="flex items-center text-green-400 text-xs font-bold bg-green-500/10 p-3 rounded-xl animate-in fade-in border border-green-500/20">
+                      <CheckCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+                      {successMessage}
                   </div>
               )}
 
