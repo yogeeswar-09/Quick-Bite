@@ -52,6 +52,7 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({ amount, user, order
         }
 
         const orderData = await orderResponse.json();
+        console.log("Order created:", orderData);
 
         const options = {
           key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_YOUR_KEY_ID', // Enter the Key ID generated from the Dashboard
@@ -61,6 +62,7 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({ amount, user, order
           description: `Order #${orderId}`,
           order_id: orderData.id,
           handler: async function (response: any) {
+            console.log("Payment handler response:", response);
             try {
               const verifyResponse = await fetch('/api/razorpay/verify', {
                 method: 'POST',
@@ -75,6 +77,7 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({ amount, user, order
               });
 
               const verifyData = await verifyResponse.json();
+              console.log("Verification result:", verifyData);
 
               if (verifyData.success) {
                 onSuccess(response.razorpay_payment_id);
@@ -82,6 +85,7 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({ amount, user, order
                 onFailure('Payment verification failed');
               }
             } catch (err) {
+              console.error("Verification error:", err);
               onFailure('Error verifying payment');
             }
           },
@@ -95,14 +99,21 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({ amount, user, order
           },
           modal: {
             ondismiss: function () {
+              console.log("Razorpay modal dismissed");
               onClose();
             },
           },
         };
 
+        console.log("Initializing Razorpay with options:", options);
+        if (!(window as any).Razorpay) {
+          throw new Error("Razorpay SDK not found on window object");
+        }
         const paymentObject = new (window as any).Razorpay(options);
+        console.log("Razorpay object created, opening...");
         paymentObject.open();
       } catch (err: any) {
+        console.error("Razorpay error:", err);
         onFailure(err.message || 'Something went wrong');
       }
     };
