@@ -25,12 +25,18 @@ const loadScript = (src: string) => {
 };
 
 const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({ amount, user, orderId, onSuccess, onFailure, onClose }) => {
+  const isProcessing = React.useRef(false);
+
   useEffect(() => {
+    if (isProcessing.current) return;
+    isProcessing.current = true;
+
     const displayRazorpay = async () => {
       const res = await loadScript('https://checkout.razorpay.com/v1/checkout.js');
 
       if (!res) {
         onFailure('Razorpay SDK failed to load. Are you online?');
+        isProcessing.current = false;
         return;
       }
 
@@ -55,7 +61,7 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({ amount, user, order
         console.log("Order created:", orderData);
 
         const options = {
-          key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_YOUR_KEY_ID', // Enter the Key ID generated from the Dashboard
+          key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_YOUR_KEY_ID',
           amount: orderData.amount,
           currency: orderData.currency,
           name: 'Quick Bite Foods',
@@ -100,6 +106,7 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({ amount, user, order
           modal: {
             ondismiss: function () {
               console.log("Razorpay modal dismissed");
+              isProcessing.current = false;
               onClose();
             },
           },
@@ -110,10 +117,19 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({ amount, user, order
           throw new Error("Razorpay SDK not found on window object");
         }
         const paymentObject = new (window as any).Razorpay(options);
+        
+        // Add explicit failure listener
+        paymentObject.on('payment.failed', function (response: any) {
+            console.error("Razorpay internal failure:", response.error);
+            isProcessing.current = false;
+            onFailure('Payment Failed: ' + (response.error.description || response.error.reason || 'Unknown error'));
+        });
+
         console.log("Razorpay object created, opening...");
         paymentObject.open();
       } catch (err: any) {
         console.error("Razorpay error:", err);
+        isProcessing.current = false;
         onFailure(err.message || 'Something went wrong');
       }
     };
