@@ -39,14 +39,16 @@ const MenuPage: React.FC = () => {
   }, []);
 
   const addToCart = (item: MenuItem) => {
-    const cart: CartItem[] = JSON.parse(localStorage.getItem('qb_cart') || '[]');
+    const user = db.getCurrentUser();
+    if (!user) return;
+    const cart: CartItem[] = JSON.parse(localStorage.getItem(`qb_cart_${user.id}`) || '[]');
     const existing = cart.find(i => i.id === item.id);
     if (existing) {
       existing.quantity += 1;
     } else {
       cart.push({ ...item, quantity: 1 });
     }
-    localStorage.setItem('qb_cart', JSON.stringify(cart));
+    localStorage.setItem(`qb_cart_${user.id}`, JSON.stringify(cart));
     window.dispatchEvent(new Event('cart-updated'));
     
     // Custom Toast Logic

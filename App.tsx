@@ -31,7 +31,12 @@ const Navbar: React.FC<{
 
   useEffect(() => {
     const updateCount = () => {
-      const cart = JSON.parse(localStorage.getItem('qb_cart') || '[]');
+      const user = db.getCurrentUser();
+      if (!user) {
+          setCartCount(0);
+          return;
+      }
+      const cart = JSON.parse(localStorage.getItem(`qb_cart_${user.id}`) || '[]');
       setCartCount(cart.reduce((acc: number, item: any) => acc + item.quantity, 0));
     };
     updateCount();
@@ -145,7 +150,7 @@ const MobileNav: React.FC<{ cartCount: number, onLogout: () => void }> = ({ cart
                 <div className="relative">
                     <ShoppingBag className="w-5 h-5" />
                     {cartCount > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full ring-2 ring-slate-950">
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full ring-2 ring-slate-950">
                             {cartCount}
                         </span>
                     )}
@@ -182,7 +187,12 @@ function App() {
     };
 
     const updateCartCount = () => {
-        const cart = JSON.parse(localStorage.getItem('qb_cart') || '[]');
+        const user = db.getCurrentUser();
+        if (!user) {
+            setCartCount(0);
+            return;
+        }
+        const cart = JSON.parse(localStorage.getItem(`qb_cart_${user.id}`) || '[]');
         setCartCount(cart.reduce((acc: number, item: any) => acc + item.quantity, 0));
     };
 

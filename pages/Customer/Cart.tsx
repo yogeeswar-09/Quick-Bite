@@ -26,7 +26,12 @@ const CartPage: React.FC = () => {
 
   const loadCart = async () => {
     try {
-      const stored = localStorage.getItem('qb_cart');
+      const user = db.getCurrentUser();
+      if (!user) {
+        setCart([]);
+        return;
+      }
+      const stored = localStorage.getItem(`qb_cart_${user.id}`);
       if (stored) setCart(JSON.parse(stored));
       else setCart([]);
       
@@ -53,6 +58,8 @@ const CartPage: React.FC = () => {
   }, []);
 
   const updateQty = (id: string, delta: number) => {
+    const user = db.getCurrentUser();
+    if (!user) return;
     const newCart = cart.map(item => {
       if (item.id === id) {
         return { ...item, quantity: Math.max(1, item.quantity + delta) };
@@ -60,7 +67,7 @@ const CartPage: React.FC = () => {
       return item;
     });
     setCart(newCart);
-    localStorage.setItem('qb_cart', JSON.stringify(newCart));
+    localStorage.setItem(`qb_cart_${user.id}`, JSON.stringify(newCart));
     window.dispatchEvent(new Event('cart-updated'));
     if (appliedCode) {
       setAppliedCode(null);
@@ -70,9 +77,11 @@ const CartPage: React.FC = () => {
   };
 
   const remove = (id: string) => {
+    const user = db.getCurrentUser();
+    if (!user) return;
     const newCart = cart.filter(item => item.id !== id);
     setCart(newCart);
-    localStorage.setItem('qb_cart', JSON.stringify(newCart));
+    localStorage.setItem(`qb_cart_${user.id}`, JSON.stringify(newCart));
     window.dispatchEvent(new Event('cart-updated'));
     if (appliedCode) {
       setAppliedCode(null);
@@ -138,7 +147,7 @@ const CartPage: React.FC = () => {
       }
       
       await db.createOrder(cart, finalTotal, selectedSlot!, discount, appliedCode || undefined, paymentMethod);
-      localStorage.removeItem('qb_cart');
+      localStorage.removeItem(`qb_cart_${user.id}`);
       setCart([]);
       window.dispatchEvent(new Event('cart-updated'));
       navigate('/orders');
