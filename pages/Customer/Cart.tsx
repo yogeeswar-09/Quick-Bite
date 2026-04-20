@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { db } from '../../services/supabaseService';
 import { CartItem, PickupSlot } from '../../types';
 import RazorpayCheckout from '../../components/RazorpayCheckout';
-import { Trash2, Plus, Minus, CreditCard, Clock, ChevronRight, ShoppingBag, Tag, X, AlertTriangle, Flame, Info, Check, Smartphone, QrCode, Banknote, ShieldCheck, Building } from 'lucide-react';
+import { Trash2, Plus, Minus, CreditCard, Clock, ChevronRight, ShoppingBag, Tag, X, AlertTriangle, Flame, Info, Check, Smartphone, QrCode, Banknote, ShieldCheck, Building, Star } from 'lucide-react';
 
 const CartPage: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -58,7 +58,6 @@ const CartPage: React.FC = () => {
   }, []);
 
   const updateQty = (id: string, delta: number) => {
-    const user = db.getCurrentUser();
     if (!user) return;
     const newCart = cart.map(item => {
       if (item.id === id) {
@@ -77,7 +76,6 @@ const CartPage: React.FC = () => {
   };
 
   const remove = (id: string) => {
-    const user = db.getCurrentUser();
     if (!user) return;
     const newCart = cart.filter(item => item.id !== id);
     setCart(newCart);
@@ -90,9 +88,17 @@ const CartPage: React.FC = () => {
     }
   };
 
-  const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  const user = db.getCurrentUser();
+
+  const getEffectivePrice = (price: number) => {
+      if (user?.activeReward === '50_OFF' && price > 50) return price - 50;
+      return price;
+  };
+
+  const subtotal = cart.reduce((acc, item) => acc + (getEffectivePrice(item.price) * item.quantity), 0);
   const tax = Math.round(subtotal * 0.02);
   const finalTotal = Math.max(0, subtotal + tax - discount);
+  const pointsToEarn = Math.floor(finalTotal / 10);
 
   const applyCoupon = () => {
     if (!couponCode.trim()) return;
@@ -138,7 +144,6 @@ const CartPage: React.FC = () => {
   const finalizeOrder = async () => {
     setPaying(true);
     try {
-      const user = db.getCurrentUser();
       if (!user) throw new Error("Session expired. Please login again.");
       
       // Simulate Payment Delay based on method (if not razorpay)
@@ -349,7 +354,14 @@ const CartPage: React.FC = () => {
                 <img src={item.image} alt={item.name} className="w-20 h-20 rounded-xl object-cover shadow-lg" />
                 <div>
                   <h3 className="font-bold text-white text-lg">{item.name}</h3>
-                  <p className="text-sm text-orange-400 font-bold">₹{item.price}</p>
+                  {user?.activeReward === '50_OFF' && item.price > 50 ? (
+                      <div className="flex items-center space-x-2">
+                          <span className="text-slate-500 line-through text-xs">₹{item.price}</span>
+                          <span className="text-orange-400 font-bold">₹{getEffectivePrice(item.price)}</span>
+                      </div>
+                  ) : (
+                      <p className="text-sm text-orange-400 font-bold">₹{item.price}</p>
+                  )}
                 </div>
               </div>
               
@@ -432,6 +444,12 @@ const CartPage: React.FC = () => {
               <span>Subtotal</span>
               <span>₹{subtotal}</span>
             </div>
+            {user?.activeReward === '50_OFF' && (
+              <div className="flex justify-between text-pink-400 text-xs font-bold">
+                <span>Reward Applied</span>
+                <span>₹50 Off Items &gt; ₹50</span>
+              </div>
+            )}
             <div className="flex justify-between text-slate-400 text-sm">
               <span>Tax (2%)</span>
               <span>₹{tax}</span>
@@ -445,6 +463,10 @@ const CartPage: React.FC = () => {
             <div className="flex justify-between text-white text-xl font-bold pt-2 border-t border-white/5 mt-2">
               <span>Total</span>
               <span>₹{finalTotal}</span>
+            </div>
+            <div className="flex justify-between text-orange-400 text-xs font-bold pt-2 border-t border-white/5 mt-2">
+              <span className="flex items-center"><Star className="w-3 h-3 mr-1 fill-current" /> Points to Earn</span>
+              <span>+{pointsToEarn} pts</span>
             </div>
           </div>
           

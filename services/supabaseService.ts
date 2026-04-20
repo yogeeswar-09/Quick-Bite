@@ -159,7 +159,8 @@ class SupabaseService extends EventTarget {
               name: 'Demo Student',
               email: 'student@demo.com',
               role: UserRole.CUSTOMER,
-              password: 'student' 
+              password: 'student',
+              points: 150 // Seed with some points
           };
           this._saveAuthUser(defaultStudent);
           console.log("Default Student seeded");
@@ -197,7 +198,9 @@ class SupabaseService extends EventTarget {
           id: authData.user.id,
           name: data.name,
           email: data.email,
-          role: data.role
+          role: data.role,
+          points: 0,
+          activeReward: null
       };
 
       this.updateSession(sanitizedUser);
@@ -219,7 +222,9 @@ class SupabaseService extends EventTarget {
                   id: user.id,
                   name: user.name,
                   email: user.email,
-                  role: user.role
+                  role: user.role,
+                  points: user.points || 0,
+                  activeReward: user.activeReward || null
               };
               this.updateSession(sanitizedUser);
               return sanitizedUser;
@@ -235,7 +240,9 @@ class SupabaseService extends EventTarget {
           id: authData.user.id,
           name: authData.user.user_metadata?.name || email.split('@')[0],
           email: authData.user.email || email,
-          role: authData.user.user_metadata?.role || UserRole.CUSTOMER
+          role: authData.user.user_metadata?.role || UserRole.CUSTOMER,
+          points: authData.user.user_metadata?.points || 0,
+          activeReward: authData.user.user_metadata?.activeReward || null
       };
 
       this.updateSession(sanitizedUser);
@@ -402,6 +409,9 @@ class SupabaseService extends EventTarget {
     const now = Date.now();
     const targetTime = now + (totalPrepMinutes * 60 * 1000);
     const paymentStatus = paymentMethod === 'CASH' ? 'PENDING' : 'PAID';
+    
+    // Calculate earned points (1 point per 10 rupees)
+    const earnedPoints = Math.floor(totalAmount / 10);
 
     const newOrder: Order = {
       id: `ORD-${Math.floor(Math.random() * 100000)}`,
@@ -419,8 +429,30 @@ class SupabaseService extends EventTarget {
       pickupSlotId,
       isRated: false,
       paymentMethod,
-      paymentStatus
+      paymentStatus,
+      earnedPoints
     };
+
+    // Update user points locally
+    if (this.currentUser) {
+        this.currentUser.points = (this.currentUser.points || 0) + earnedPoints;
+        
+        // Clear active reward if it was used
+        if (this.currentUser.activeReward) {
+            this.currentUser.activeReward = null;
+        }
+
+        this.updateSession(this.currentUser);
+        
+        // Also update in the mock users array so it persists across reloads
+        const users = this._getStoredAuthUsers();
+        const userIndex = users.findIndex(u => u.id === this.currentUser!.id);
+        if (userIndex !== -1) {
+            users[userIndex].points = this.currentUser.points;
+            users[userIndex].activeReward = this.currentUser.activeReward;
+            localStorage.setItem('qb_auth_users', JSON.stringify(users));
+        }
+    }
 
     // 1. SAVE LOCALLY (Guarantees UI update)
     this._localOrders.unshift(newOrder);
@@ -436,6 +468,7 @@ class SupabaseService extends EventTarget {
         couponCode: _couponCode, 
         paymentMethod: _paymentMethod,
         paymentStatus: _paymentStatus,
+        earnedPoints: _earnedPoints,
         ...supabasePayload 
     } = newOrder;
 
@@ -456,6 +489,84 @@ class SupabaseService extends EventTarget {
     
     this.dispatchEvent(new Event('change'));
     return newOrder;
+  }
+
+  async createRewardOrder(pointsCost: number, item: MenuItem, pickupSlotId: string): Promise<Order> {
+    if (!this.currentUser) throw new Error('Must be logged in');
+    if ((this.currentUser.points || 0) < pointsCost) throw new Error('Not enough points');
+
+    // Deduct points
+    this.currentUser.points -= pointsCost;
+    this.updateSession(this.currentUser);
+    
+    const users = this._getStoredAuthUsers();
+    const userIndex = users.findIndex(u => u.id === this.currentUser!.id);
+    if (userIndex !== -1) {
+        users[userIndex].points = this.currentUser.points;
+        localStorage.setItem('qb_auth_users', JSON.stringify(users));
+    }
+
+    const stats = await this.getKitchenStats();
+    const basePrepMinutes = 15; 
+    const queuePenaltyMinutes = stats.activeCount * 2; 
+    const totalPrepMinutes = basePrepMinutes + queuePenaltyMinutes;
+    
+    const now = Date.now();
+    const targetTime = now + (totalPrepMinutes * 60 * 1000);
+
+    const cartItem: CartItem = { ...item, quantity: 1 };
+
+    const newOrder: Order = {
+      id: `ORD-${Math.floor(Math.random() * 100000)}`,
+      userId: this.currentUser.id,
+      userName: this.currentUser.name,
+      items: [cartItem], 
+      totalAmount: 0,
+      discountAmount: item.price,
+      status: OrderStatus.CONFIRMED,
+      createdAt: now,
+      prepStartTime: now,
+      targetTime: targetTime,
+      pickupTime: '12:00 PM', // Simplified
+      pickupSlotId,
+      isRated: false,
+      paymentMethod: 'POINTS',
+      paymentStatus: 'PAID',
+      earnedPoints: 0
+    };
+
+    this._localOrders.unshift(newOrder);
+    this._persistOrders();
+    this.dispatchEvent(new Event('change'));
+
+    window.dispatchEvent(new CustomEvent('qb-notification', {
+        detail: { type: 'ORDER_CREATED', payload: newOrder }
+    }));
+
+    return newOrder;
+  }
+
+  async activate50OffReward() {
+    if (!this.currentUser) throw new Error('Must be logged in');
+    if ((this.currentUser.points || 0) < 1000) throw new Error('Not enough points');
+    if (this.currentUser.activeReward === '50_OFF') throw new Error('Reward already active');
+
+    this.currentUser.points -= 1000;
+    this.currentUser.activeReward = '50_OFF';
+    this.updateSession(this.currentUser);
+
+    const users = this._getStoredAuthUsers();
+    const userIndex = users.findIndex(u => u.id === this.currentUser!.id);
+    if (userIndex !== -1) {
+        users[userIndex].points = this.currentUser.points;
+        users[userIndex].activeReward = this.currentUser.activeReward;
+        localStorage.setItem('qb_auth_users', JSON.stringify(users));
+    }
+    
+    this.dispatchEvent(new Event('change'));
+    window.dispatchEvent(new CustomEvent('qb-notification', {
+        detail: { type: 'REWARD_ACTIVATED', payload: { message: '₹50 Off Discount Activated!' } }
+    }));
   }
 
   async updateOrderStatus(orderId: string, status: OrderStatus) {
@@ -490,6 +601,28 @@ class SupabaseService extends EventTarget {
         detail: { type: 'ORDER_UPDATED', payload: { id: orderId, status } }
     }));
     this.dispatchEvent(new Event('change'));
+  }
+
+  // --- Trending ---
+  async getTrendingItems(): Promise<MenuItem[]> {
+      const orders = await this.getOrders();
+      // Look at the last 20 orders to determine trending
+      const recentOrders = orders.slice(0, 20);
+      const itemCounts: Record<string, number> = {};
+      
+      recentOrders.forEach(o => {
+          o.items.forEach(i => {
+              itemCounts[i.id] = (itemCounts[i.id] || 0) + i.quantity;
+          });
+      });
+      
+      // Sort by count descending and take top 4
+      const sortedIds = Object.keys(itemCounts)
+          .sort((a, b) => itemCounts[b] - itemCounts[a])
+          .slice(0, 4);
+          
+      const menu = await this.getMenu();
+      return menu.filter(m => sortedIds.includes(m.id));
   }
 
   // --- Slots & Coupons ---
@@ -575,6 +708,22 @@ class SupabaseService extends EventTarget {
         .sort((a, b) => (b.totalReviews || 0) - (a.totalReviews || 0))
         .slice(0, 3);
 
+      // Generate last 7 days revenue
+      const revenueData = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(startOfToday - i * 86400000);
+        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+        
+        const dayStart = d.getTime();
+        const dayEnd = dayStart + 86400000;
+        
+        const dayRevenue = orders
+          .filter(o => o.createdAt >= dayStart && o.createdAt < dayEnd)
+          .reduce((sum, o) => sum + o.totalAmount, 0);
+          
+        revenueData.push({ name: dayName, revenue: dayRevenue });
+      }
+
       return {
           todayRevenue,
           yesterdayRevenue,
@@ -584,12 +733,7 @@ class SupabaseService extends EventTarget {
           activeOrders: stats.activeCount,
           lowestRated,
           mostReviewed,
-          revenueData: [
-            { name: 'Mon', revenue: 0 }, { name: 'Tue', revenue: 0 }, 
-            { name: 'Wed', revenue: 0 }, { name: 'Thu', revenue: 0 }, 
-            { name: 'Fri', revenue: 0 }, { name: 'Sat', revenue: 0 }, 
-            { name: 'Today', revenue: todayRevenue }
-          ],
+          revenueData,
           categoryData: categoryData.length > 0 ? categoryData : [{ name: 'No Sales', value: 1 }],
           popularItem,
           peakTime: '12:00 PM'

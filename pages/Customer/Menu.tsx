@@ -26,17 +26,26 @@ const MenuPage: React.FC = () => {
   const [selectedMood, setSelectedMood] = useState<string | null>(null);
   const [suggestion, setSuggestion] = useState<{name: string, reason: string} | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [trendingItems, setTrendingItems] = useState<MenuItem[]>([]);
+  const user = db.getCurrentUser();
 
   useEffect(() => {
     const fetchMenu = async () => {
         const data = await db.getMenu();
         setMenu(data);
+        const trending = await db.getTrendingItems();
+        setTrendingItems(trending);
         setLoading(false);
     };
     fetchMenu();
     db.addEventListener('change', fetchMenu);
     return () => db.removeEventListener('change', fetchMenu);
   }, []);
+
+  const getEffectivePrice = (price: number) => {
+      if (user?.activeReward === '50_OFF' && price > 50) return price - 50;
+      return price;
+  };
 
   const addToCart = (item: MenuItem) => {
     const user = db.getCurrentUser();
@@ -207,7 +216,7 @@ const MenuPage: React.FC = () => {
       {/* Category Navigation */}
       <div className="mb-10 sticky top-20 z-40 bg-slate-950/80 backdrop-blur-xl py-4 -mx-4 px-4 border-b border-white/5">
         <div className="flex space-x-3 overflow-x-auto no-scrollbar max-w-7xl mx-auto">
-          {['All', ...Object.values(FoodCategory)].map(cat => (
+          {['All', 'Trending', ...Object.values(FoodCategory)].map(cat => (
             <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat as any)}
@@ -217,6 +226,7 @@ const MenuPage: React.FC = () => {
                     : 'bg-slate-900 text-slate-400 border-slate-800 hover:border-slate-600 hover:text-slate-200'
                 }`}
             >
+                {cat === 'Trending' && <Flame className="w-4 h-4 inline-block mr-1 text-orange-500" />}
                 {cat}
             </button>
           ))}
@@ -225,7 +235,7 @@ const MenuPage: React.FC = () => {
 
       {/* Menu Grid */}
       <div id="menu-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-        {filteredMenu.map(item => (
+        {(selectedCategory === 'Trending' ? trendingItems : filteredMenu).map(item => (
             <div key={item.id} className="glass-card rounded-3xl overflow-hidden hover:border-orange-500/30 transition-all duration-300 group hover:-translate-y-2">
                 <div className="relative h-56 overflow-hidden">
                     <img src={item.image} alt={item.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
@@ -238,10 +248,15 @@ const MenuPage: React.FC = () => {
                         {item.averageRating?.toFixed(1) || 'N/A'}
                     </div>
 
-                    <div className="absolute bottom-4 left-4">
+                    <div className="absolute bottom-4 left-4 flex space-x-2">
                          <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide text-white mb-1 shadow-sm ${item.isVeg ? 'bg-green-500' : 'bg-red-500'}`}>
                             {item.isVeg ? 'Veg' : 'Non-Veg'}
                         </span>
+                        {trendingItems.some(t => t.id === item.id) && (
+                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide text-white bg-orange-500 mb-1 shadow-sm">
+                                <Flame className="w-3 h-3 mr-1" /> Trending
+                            </span>
+                        )}
                     </div>
                 </div>
                 
@@ -260,7 +275,14 @@ const MenuPage: React.FC = () => {
                     <div className="flex items-center justify-between mt-2">
                         <div>
                             <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Price</p>
-                            <p className="text-2xl font-bold text-white">₹{item.price}</p>
+                            {user?.activeReward === '50_OFF' && item.price > 50 ? (
+                                <div className="flex items-baseline space-x-2">
+                                    <p className="text-2xl font-bold text-orange-400">₹{getEffectivePrice(item.price)}</p>
+                                    <p className="text-sm font-bold text-slate-500 line-through">₹{item.price}</p>
+                                </div>
+                            ) : (
+                                <p className="text-2xl font-bold text-white">₹{item.price}</p>
+                            )}
                         </div>
                         <div className="flex items-center text-xs text-slate-500 bg-slate-800/50 px-3 py-1.5 rounded-lg border border-white/5">
                             <Clock className="w-3 h-3 mr-1.5" /> 10-15m

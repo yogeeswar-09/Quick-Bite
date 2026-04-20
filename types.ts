@@ -39,6 +39,8 @@ export interface User {
   email: string;
   role: UserRole;
   specialty?: FoodCategory; // For Specialized Admin
+  points?: number; // Loyalty points
+  activeReward?: '50_OFF' | null;
 }
 
 export interface MenuItem {
@@ -76,6 +78,7 @@ export interface Order {
   isRated?: boolean;
   paymentMethod?: string;
   paymentStatus?: 'PAID' | 'PENDING';
+  earnedPoints?: number;
 }
 
 export interface PickupSlot {

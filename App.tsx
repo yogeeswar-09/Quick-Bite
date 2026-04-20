@@ -8,8 +8,9 @@ import CustomerCart from './pages/Customer/Cart';
 import CustomerOrders from './pages/Customer/Orders';
 import AdminDashboard from './pages/Admin/Dashboard';
 import Chatbot from './components/Chatbot';
+import RewardsPage from './pages/Customer/Rewards';
 import { useNotificationSystem, ToastContainer, NotificationBell } from './components/NotificationSystem';
-import { ShoppingBag, LogOut, Coffee, Heart, LayoutDashboard, Package, Home } from 'lucide-react';
+import { ShoppingCart, LogOut, Coffee, Heart, LayoutDashboard, Package, Home, Star, Gift } from 'lucide-react';
 
 const Navbar: React.FC<{ 
     user: User | null; 
@@ -72,6 +73,12 @@ const Navbar: React.FC<{
           <div className="flex items-center space-x-2 md:space-x-6">
             {isCustomer && (
               <>
+                {/* Points Display */}
+                <Link to="/rewards" className="hidden md:flex items-center space-x-1 bg-orange-500/10 border border-orange-500/20 px-3 py-1.5 rounded-full text-orange-400 font-bold text-sm hover:bg-orange-500/20 transition-colors cursor-pointer">
+                    <Star className="w-4 h-4 fill-current" />
+                    <span>{user.points || 0} pts</span>
+                </Link>
+
                 {/* Desktop Links */}
                 <div className="hidden md:flex space-x-1 bg-white/5 p-1 rounded-full border border-white/5 backdrop-blur-md">
                   <NavLink to="/menu" active={location.pathname === '/menu'}>Menu</NavLink>
@@ -81,7 +88,7 @@ const Navbar: React.FC<{
                 {/* Desktop Cart */}
                 <div className="hidden md:block relative group">
                   <Link to="/cart" className={`p-2.5 rounded-full transition-all ${location.pathname === '/cart' ? 'bg-orange-500/20 text-orange-400' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                    <ShoppingBag className="w-5 h-5" />
+                    <ShoppingCart className="w-6 h-6" strokeWidth={1.5} />
                   </Link>
                   {cartCount > 0 && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full shadow-lg ring-2 ring-slate-950 animate-bounce">
@@ -148,7 +155,7 @@ const MobileNav: React.FC<{ cartCount: number, onLogout: () => void }> = ({ cart
             
             <Link to="/cart" className={`relative flex flex-col items-center space-y-1 transition-colors ${isActive('/cart') ? 'text-orange-500' : 'text-slate-500'}`}>
                 <div className="relative">
-                    <ShoppingBag className="w-5 h-5" />
+                    <ShoppingCart className="w-6 h-6" strokeWidth={1.5} />
                     {cartCount > 0 && (
                         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full ring-2 ring-slate-950">
                             {cartCount}
@@ -161,6 +168,11 @@ const MobileNav: React.FC<{ cartCount: number, onLogout: () => void }> = ({ cart
             <Link to="/orders" className={`flex flex-col items-center space-y-1 transition-colors ${isActive('/orders') ? 'text-orange-500' : 'text-slate-500'}`}>
                 <Package className="w-5 h-5" />
                 <span className="text-[10px] font-bold">Orders</span>
+            </Link>
+
+            <Link to="/rewards" className={`flex flex-col items-center space-y-1 transition-colors ${isActive('/rewards') ? 'text-orange-500' : 'text-slate-500'}`}>
+                <Gift className="w-5 h-5" />
+                <span className="text-[10px] font-bold">Rewards</span>
             </Link>
 
             <button onClick={onLogout} className="flex flex-col items-center space-y-1 text-slate-500 hover:text-red-400 transition-colors">
@@ -241,6 +253,7 @@ function App() {
             <Route path="/menu" element={user?.role === UserRole.CUSTOMER ? <CustomerMenu /> : <Navigate to="/auth" />} />
             <Route path="/cart" element={user?.role === UserRole.CUSTOMER ? <CustomerCart /> : <Navigate to="/auth" />} />
             <Route path="/orders" element={user?.role === UserRole.CUSTOMER ? <CustomerOrders /> : <Navigate to="/auth" />} />
+            <Route path="/rewards" element={user?.role === UserRole.CUSTOMER ? <RewardsPage /> : <Navigate to="/auth" />} />
             
             {/* Admin Routes */}
             <Route path="/admin" element={
